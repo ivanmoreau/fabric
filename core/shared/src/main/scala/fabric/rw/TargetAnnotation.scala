@@ -21,10 +21,10 @@
 
 package fabric.rw
 
-import scala.annotation.compileTimeOnly
+import scala.annotation.{compileTimeOnly, ConstantAnnotation}
 import scala.annotation.meta.{field, param}
 
 @field
 @param
-@compileTimeOnly("Only for code generation")
+@compileTimeOnly("enable macro paradise to expand macro annotations")
 case class jsonTarget(name: String) extends scala.annotation.ConstantAnnotation

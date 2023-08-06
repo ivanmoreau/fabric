@@ -128,12 +128,30 @@ class RWSpecAuto extends AnyWordSpec with Matchers {
         )
       )
     }
+    "respect custom target names" in {
+      val action = Action(1, true)
+      val value = action.json
+      value should be(
+        obj(
+          "id" -> 1,
+          "wait" -> true
+        )
+      )
+      val back = value.as[Action]
+      back should be(action)
+    }
     // TODO: Enable once Scala 3 support for sealed traits is working
 //    "supporting sealed traits" in {
 //      val car: VehicleType = VehicleType.Car
 //      car.json should be(Str("Car"))
 //      "SUV".json.as[VehicleType] should be(VehicleType.SUV)
 //    }
+  }
+
+  case class Action(id: Int, @jsonTarget("wait") _wait: Boolean)
+
+  object Action {
+    implicit val rw: RW[Action] = RW.gen
   }
 
   case class User(name: String, _id: String) {

@@ -59,6 +59,11 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
   .settings(
     name := "fabric-core",
     mimaPreviousArtifacts := Set.empty,
+    scalacOptions ++= (if (scalaVersion.value.startsWith("2.13")) {
+                         Seq("-Ymacro-annotations")
+                       } else {
+                         Nil
+                       }),
     libraryDependencies ++= Seq(
       "org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
       "org.scalatestplus" %%% "scalacheck-1-16" % scalaCheckVersion % Test
@@ -70,7 +75,13 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         Seq(
           "org.scala-lang.modules" %%% "scala-collection-compat" % collectionCompatVersion,
           "org.scala-lang" % "scala-reflect" % scalaVersion.value
-        )
+        ) ++ (if (scalaVersion.value.startsWith("2.12")) {
+                Seq(
+                  "org.scalamacros" %% "paradise" % "2.1.1"
+                )
+              } else {
+                Nil
+              })
       }
     ),
     Compile / unmanagedSourceDirectories ++= {

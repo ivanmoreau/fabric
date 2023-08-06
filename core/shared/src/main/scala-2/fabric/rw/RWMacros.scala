@@ -69,10 +69,14 @@ object RWMacros {
       case m: MethodSymbol if m.isPrimaryConstructor => m.paramLists.head
     } match {
       case Some(fields) =>
+        val labels = getTargetAnnotations(context)
         val toMap: List[context.universe.Tree] = fields.map { field =>
           val name = field.asTerm.name
+          println("Holaaaaa")
+          println(labels)
           val key = name.decodedName.toString
-          q"$key -> t.$name.json"
+          val keyResult = labels.getOrElse(key, key)
+          q"$keyResult -> t.$name.json"
         }
         context.Expr[Reader[T]](q"""
             import _root_.fabric._
@@ -123,7 +127,67 @@ object RWMacros {
     }.toMap
   }
 
-  def caseClassW[T](
+  /* SCALA 3
+  def getTargetAnnotationsImpl[T](using Quotes, Type[T]): Expr[Map[String, String]] = {
+    import quotes.reflect._
+    val sym = TypeTree.of[T].symbol
+    val annotSym = TypeTree.of[jsonTarget].symbol
+
+    if (sym.isClassDef) {
+      val names =
+        for p <- sym.caseFields if p.hasAnnotation(annotSym)
+        yield (p.name, p.getAnnotation(annotSym).get.asInstanceOf[Apply].args.head.asInstanceOf[Literal].constant.value.asInstanceOf[String])
+
+      val namesExpr: Expr[List[(String, String)]] = Expr.ofList(names.map { case (name, target) => Expr((name, target)) })
+      val mapExpr: Expr[Map[String, String]] = '{ $namesExpr.toMap }
+
+      mapExpr
+    } else {
+      '{ Map.empty }
+    }
+  */
+
+  private def getTargetAnnotations[T](c: blackbox.Context)(implicit T: c.WeakTypeTag[T]): Map[String, String] = {
+    import c.universe._
+
+    val tpe = T.tpe
+    val tpe1 = weakTypeOf[T]
+    val sym = tpe1.typeSymbol.asClass
+    val annotSym = typeOf[jsonTarget].typeSymbol
+
+    println("getTargetAnnotations" -> s"sym: $sym")
+    println("getTargetAnnotations" -> s"declarations: ${tpe.decls.collect { case m: MethodSymbol if m.isCaseAccessor => m }}")
+
+    val p = tpe.decls.collect { case m: MethodSymbol if m.isCaseAccessor => m }
+    val x = p.map(_.annotations)
+    println("getTargetAnnotations" -> s"p: $x")
+
+    if (sym.isClass) {
+      val names = for {
+        p <- sym.typeSignature.decls.collect { case m: MethodSymbol if m.isCaseAccessor => m }
+        if p.annotations.exists(_.tree.tpe == annotSym)
+      } yield {
+        val target = p.annotations.find(_.tree.tpe == annotSym).get
+        val targetValue = target.tree.children.tail.head.collect { case Literal(Constant(s: String)) => s }.head
+        (p.name.toString, targetValue)
+      }
+
+      println("getTargetAnnotations" -> s"names: $names")
+
+      //val namesExpr = c.Expr[List[(String, String)]](Apply(Select(reify(List).tree, TermName("apply")), names.map {
+      //  case (name, target) => Apply(Select(reify((name, target)).tree, TermName("asInstanceOf")), List(Select(Select(Ident(definitions.PredefModule), TermName("classOf")), TypeName("String"))))
+      //}))
+      //val mapExpr = c.Expr[Map[String, String]](Apply(Select(reify(collection.immutable.Map).tree, TermName("apply")), List(namesExpr.tree)))
+
+      //mapExpr
+      names.toMap
+    } else {
+      //c.Expr[Map[String, String]](q"_root_.scala.collection.immutable.Map.empty")
+      Map.empty
+    }
+  }
+
+    def caseClassW[T](
     context: blackbox.Context
   )(implicit t: context.WeakTypeTag[T]): context.Expr[Writer[T]] = {
     import context.universe._
@@ -137,6 +201,7 @@ object RWMacros {
       case m: MethodSymbol if m.isPrimaryConstructor => m.paramLists.head
     } match {
       case Some(fields) =>
+        println("Holaaaaa")
         val fromMap: List[context.universe.Tree] = fields.zipWithIndex.map { case (field, index) =>
           val name = field.asTerm.name
           val key = name.decodedName.toString

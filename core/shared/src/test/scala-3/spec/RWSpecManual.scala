@@ -48,15 +48,5 @@ class AutoDerivationSpec extends AnyWordSpec with Matchers {
       val back = value.as[Person]
       back should be(person)
     }
-
-    final case class Action(id: Int, @jsonTarget("wait") _wait: Boolean) derives RW
-
-    "respect custom target names" in {
-      val action = Action(1, true)
-      val value = action.json
-      value should be(obj("id" -> 1, "wait" -> true))
-      val back = value.as[Action]
-      back should be(action)
-    }
   }
 }
