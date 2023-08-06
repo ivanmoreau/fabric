@@ -61,7 +61,8 @@ trait CompileRW {
             val defaults = getDefaultParams[A]
             val rw = summonInline[RW[hd]]
             val d = if (defaults.contains(hdLabelValue)) rw.definition.opt else rw.definition
-            VectorMap(hdLabelValue -> d) ++ toDefinitionElems[A, tl, tlLabels](index + 1)
+            val label = getTargetAnnotations[A].getOrElse(hdLabelValue, hdLabelValue)
+            VectorMap(label -> d) ++ toDefinitionElems[A, tl, tlLabels](index + 1)
           case EmptyTuple => sys.error("Not possible")
         }
       }
@@ -83,7 +84,8 @@ trait CompileRW {
             val hdValue = a.productElement(index).asInstanceOf[hd]
             val hdReader = summonInline[Reader[hd]]
             val value = hdReader.read(hdValue)
-            VectorMap(hdLabelValue -> value) ++ toMapElems[A, tl, tlLabels](a, index + 1)
+            val label = getTargetAnnotations[A].getOrElse(hdLabelValue, hdLabelValue)
+            VectorMap(label -> value) ++ toMapElems[A, tl, tlLabels](a, index + 1)
           case EmptyTuple => sys.error("Not possible")
         }
       }
@@ -115,7 +117,8 @@ trait CompileRW {
           case _: (hdLabel *: tlLabels) =>
             import fabric.rw._
             val hdLabelValue: String = constValue[hdLabel].asInstanceOf[String]
-            val hdValueOption: Option[Json] = map.get(hdLabelValue)
+            val label = getTargetAnnotations[A].getOrElse(hdLabelValue, hdLabelValue)
+            val hdValueOption: Option[Json] = map.get(label)
             val hdWritable: Writer[hd] = summonInline[Writer[hd]]
             val valueOption: Option[hd] = hdValueOption.map(hdWritable.write)
             def defaultAlternative = if (hdLabelValue == "json" && isJsonWrapper) {
@@ -137,6 +140,8 @@ trait CompileRW {
   }
 
   inline def getDefaultParams[T]: Map[String, AnyRef] = ${ CompileRW.getDefaultParmasImpl[T] }
+
+  inline def getTargetAnnotations[T]: Map[String, String] = ${ CompileRW.getTargetAnnotationsImpl[T] }
 
   inline def getClassName[T]: String = ${ CompileRW.getClassNameImpl[T] }
 }
@@ -162,6 +167,25 @@ object CompileRW {
         Expr.ofList(idents.map(_.asExpr))
 
       '{ $namesExpr.zip($identsExpr.map(_.asInstanceOf[AnyRef])).toMap }
+    } else {
+      '{ Map.empty }
+    }
+  }
+
+  def getTargetAnnotationsImpl[T](using Quotes, Type[T]): Expr[Map[String, String]] = {
+    import quotes.reflect._
+    val sym = TypeTree.of[T].symbol
+    val annotSym = TypeTree.of[jsonTarget].symbol
+
+    if (sym.isClassDef) {
+      val names =
+        for p <- sym.caseFields if p.hasAnnotation(annotSym)
+        yield (p.name, p.getAnnotation(annotSym).get.asInstanceOf[Apply].args.head.asInstanceOf[Literal].constant.value.asInstanceOf[String])
+
+      val namesExpr: Expr[List[(String, String)]] = Expr.ofList(names.map { case (name, target) => Expr((name, target)) })
+      val mapExpr: Expr[Map[String, String]] = '{ $namesExpr.toMap }
+
+      mapExpr
     } else {
       '{ Map.empty }
     }
